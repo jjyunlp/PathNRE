@@ -97,13 +97,15 @@ void init() {
 			fread(&wordVec[a + last], sizeof(float), 1, f);
 			smp += wordVec[a + last]*wordVec[a + last];
 		}
+		// This may seem like a L2 ? Normalization
 		smp = sqrt(smp);
 		for (int a = 0; a< dimension; a++)
 			wordVec[a+last] = wordVec[a+last] / smp;
+		// word name to id and id to name(based on id, so list is quick)
 		wordMapping[name] = b;
 		wordList[b] = name;
 	}
-	wordTotal+=1;
+	wordTotal += 1;
 	fclose(f);
 	char buffer[1000];
 	f = fopen("../data/relation2id.txt", "r");
@@ -127,11 +129,13 @@ void init() {
 		string head_s = (string)(buffer);
 		int head = wordMapping[(string)(buffer)];
 		fscanf(f,"%s",buffer);
-		int tail = wordMapping[(string)(buffer)];
 		string tail_s = (string)(buffer);
-		fscanf(f,"%s",buffer);
+		int tail = wordMapping[(string)(buffer)];
 
+		fscanf(f,"%s",buffer);
 		bags_train[e1+"\t"+e2+"\t"+(string)(buffer)].push_back(headList.size());
+		headList.push_back(head);
+		tailList.push_back(tail);
 
 		int num = relationMapping[(string)(buffer)];
 		int len = 0, lefnum = 0, rignum = 0;
@@ -139,16 +143,16 @@ void init() {
 		while (fscanf(f,"%s", buffer)==1) {
 			std::string con = buffer;
 			if (con=="###END###") break;
+			// wordMapping["UNK"] = 0(int), if word not in wordMapping, it also returns 0
 			int gg = wordMapping[con];
 			if (con == head_s) lefnum = len;
 			if (con == tail_s) rignum = len;
 			len++;
 			tmpp.push_back(gg);
 		}
-		headList.push_back(head);
-		tailList.push_back(tail);
 		relationList.push_back(num);
 		trainLength.push_back(len);
+		// The position information between context and e1 e2
 		int *con=(int *)calloc(len,sizeof(int));
 		int *conl=(int *)calloc(len,sizeof(int));
 		int *conr=(int *)calloc(len,sizeof(int));
@@ -179,16 +183,12 @@ void init() {
 	vector<string> b_train;
 	int index = 0;
 	int error = 0;
+	// Init bags id and save bags' name in b_train
 	for (map<string,vector<int> >:: iterator it = bags_train.begin(); it!=bags_train.end(); it++)
 	{
 		b_train.push_back(it->first);
 		bags_train_id[it->first] = bags_id;
 		bags_id++;
-	}
-
-	for(int i = 0; i<b_train.size(); i++)
-	{
-		printf("%d, %s, %d\n",i,b_train[i].c_str(),bags_train_id[b_train[i]]);
 	}
 
 	f = fopen("../data/train.txt", "r");
@@ -205,16 +205,17 @@ void init() {
 		string tail_s = (string)(buffer);
 		fscanf(f,"%s",buffer);
 
-		// Do not append the head == tail
+		// Get all head->tail pair, head->{tail1, tail2, ...}
 		if(count(train_pair[head].begin() , train_pair[head].end() , tail)==0)
 		{
 			train_pair[head].push_back(tail);
 		}
-		if(count(train_pair_bags[make_pair(head,tail)].begin() , train_pair_bags[make_pair(head,tail)].end() , bags_train_id[e1+"\t"+e2+"\t"+(string)(buffer)])==0)
+		// Get all <head, pair> with its bags (Should only be one in this task)
+		if(count(train_pair_bags[make_pair(head,tail)].begin(), train_pair_bags[make_pair(head,tail)].end(), bags_train_id[e1+"\t"+e2+"\t"+(string)(buffer)])==0)
 		{
 			train_pair_bags[make_pair(head,tail)].push_back(bags_train_id[e1+"\t"+e2+"\t"+(string)(buffer)]);
 		}
-
+		// For testing, it shares training information
 		if(count(test_train_pair[head].begin() , test_train_pair[head].end() , tail)==0)
 		{
 			test_train_pair[head].push_back(tail);
@@ -232,16 +233,16 @@ void init() {
 
 	}
 	fclose(f);
-
+	
+	// This is a vertification of bag
 	for(int i = 0; i < b_train.size();i++)
 	{
-		//printf("%d\n",i);
 		int flag = 1;
 		string s = b_train[i];
 		int id = bags_train[s][0];
 		int head = headList[id];
 		int tail = tailList[id];
-		for(int j = 0;j<train_pair_bags[make_pair(head,tail)].size();j++)
+		for(int j = 0; j < train_pair_bags[make_pair(head,tail)].size(); j++)
 		{
 			int idd = train_pair_bags[make_pair(head,tail)][j];
 			if (idd == i)
@@ -312,9 +313,9 @@ void init() {
 							continue;
 						}
 						int *a = (int *)malloc(3* sizeof(int));
-						a[0] = 2;
-						a[1] = id_mid_1;
-						a[2] = id_mid_2;
+						a[0] = 2;		// 2 means the path contains 2 relations
+						a[1] = id_mid_1;	// <e1, e3>'s bag id
+						a[2] = id_mid_2;	// <e3, e2>'s bag id
 						train_path[b_train[i]].push_back(a);
 						num_2++;
 					}
@@ -416,8 +417,9 @@ void init() {
 		int tail = wordMapping[(string)(buffer)];
 		fscanf(f,"%s",buffer);
 		int num = relationMapping[(string)(buffer)];
-		if (num == 100)
+		if (num == 100)		// NA relation
 		{
+			// NA instances are put together. NO! num will not be 100! This part is useless
 			fscanf(f,"%s",buffer);
 			int rel = relationMapping[(string)(buffer)];
 			rel_pred[testheadList.size()] = rel;
@@ -586,6 +588,7 @@ void init() {
 					int id_mid_1 = test_pair_bags[make_pair(e1,e3)][jj];
 					string s_tmp = b_test[id_mid_1];
 					int id_tmp = bags_test[s_tmp][0];
+					// Actually, 99 means NA relation. 100 is not existe
 					if(testrelationList[id_tmp] == 99 || testrelationList[id_tmp] == 100)
 					{
 						continue;
@@ -602,7 +605,7 @@ void init() {
 						int *a = (int *)malloc(5* sizeof(int));
 						a[0] = 2;
 						a[1] = id_mid_1;
-						a[2] = 0;
+						a[2] = 0;	// 0 means this bag came from test data
 						a[3] = id_mid_2;
 						a[4] = 0;
 						test_path[b_test[i]].push_back(a);
@@ -610,7 +613,7 @@ void init() {
 					}
 				}
 			}
-
+			// when the sub-path(<e3, e2>) came from training data
 			for (int k = 0; k < test_train_pair[e3].size();k++)
 			{
 				int e4 = test_train_pair[e3][k];
@@ -639,7 +642,7 @@ void init() {
 						a[1] = id_mid_1;
 						a[2] = 0;
 						a[3] = id_mid_2;
-						a[4] = 1;
+						a[4] = 1;	// 1 means this bag came from train data
 						test_path[b_test[i]].push_back(a);
 						num_2++;
 					}
@@ -749,7 +752,7 @@ void init() {
 	fclose(fout);
 
 	cout<<PositionMinE1<<' '<<PositionMaxE1<<' '<<PositionMinE2<<' '<<PositionMaxE2<<endl;
-
+	// What is these?
 	for (int i = 0; i < trainPositionE1.size(); i++) {
 		int len = trainLength[i];
 		int *work1 = trainPositionE1[i];
